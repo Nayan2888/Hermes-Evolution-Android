@@ -9,7 +9,6 @@ pluginManagement {
         }
         mavenCentral()
         gradlePluginPortal()
-        maven("https://chaquo.com/maven")
     }
 }
 dependencyResolutionManagement {
@@ -17,9 +16,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven("https://chaquo.com/maven")
     }
 }
 
-rootProject.name = "hermes-evolution-android"
+rootProject.name = "hermes-agent-android"
 include(":app")

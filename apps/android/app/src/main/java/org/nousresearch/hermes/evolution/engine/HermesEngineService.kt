@@ -11,135 +11,25 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 import org.nousresearch.hermes.evolution.HermesApplication
 import org.nousresearch.hermes.evolution.MainActivity
 import org.nousresearch.hermes.evolution.R
 
-/**
- * Android Foreground Service hosting the embedded Python Hermes agent runtime.
- * Guarantees persistent execution across Android 16 background limits and job quotas.
- */
 class HermesEngineService : Service() {
-
-    private val serviceScope = CoroutineScope(Dispatchers.Default + Job())
-    private var wakeLock: PowerManager.WakeLock? = null
-    private lateinit var bridge: HermesBridge
-
-    override fun onCreate() {
-        super.onCreate()
-        Log.i(TAG, "HermesEngineService created.")
-
-        bridge = HermesBridge.getInstance(this)
-
-        acquireWakeLock()
-        startForegroundWithNotification(AgentState.READY)
-        observeAgentState()
-    }
-
-    private fun acquireWakeLock() {
-        try {
-            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "HermesEvolution:EngineWakeLock").apply {
-                setReferenceCounted(false)
-                acquire(10 * 60 * 1000L) // 10 minutes default safety cap
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Unable to acquire WakeLock: ${e.message}")
-        }
-    }
-
-    private fun startForegroundWithNotification(state: AgentState) {
-        val notification = buildNotification(state)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
-        }
-    }
-
-    private fun buildNotification(state: AgentState): Notification {
-        val openIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            openIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        val statusText = when (state) {
-            AgentState.READY -> getString(R.string.agent_status_ready)
-            AgentState.THINKING -> getString(R.string.agent_status_thinking)
-            AgentState.WORKING -> getString(R.string.agent_status_working)
-            AgentState.WAITING -> getString(R.string.agent_status_waiting)
-            AgentState.COMPLETED -> getString(R.string.agent_status_completed)
-            AgentState.ERROR -> getString(R.string.agent_status_error)
-            AgentState.OFFLINE -> getString(R.string.agent_status_offline)
-        }
-
-        return NotificationCompat.Builder(this, HermesApplication.NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("Hermes Evolution")
-            .setContentText(statusText)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentIntent(pendingIntent)
-            .setOngoing(true)
-            .setSilent(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
-    }
-
-    private fun observeAgentState() {
-        serviceScope.launch {
-            bridge.agentState.collectLatest { state ->
-                val notification = buildNotification(state)
-                val manager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-                manager.notify(NOTIFICATION_ID, notification)
-            }
-        }
-    }
-
-    override fun onTrimMemory(level: Int) {
-        super.onTrimMemory(level)
-        Log.w(TAG, "onTrimMemory received level: $level. Notifying Hermes memory optimizer.")
-        if (level >= TRIM_MEMORY_RUNNING_CRITICAL) {
-            // Signal python garbage collector and cache cleanup
-        }
-    }
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action
-        Log.d(TAG, "onStartCommand with action: $action")
-        return START_STICKY
-    }
-
-    override fun onBind(intent: Intent?): IBinder? = null
-
-    override fun onDestroy() {
-        super.onDestroy()
-        serviceScope.cancel()
-        wakeLock?.let {
-            if (it.isHeld) it.release()
-        }
-        Log.i(TAG, "HermesEngineService destroyed.")
-    }
 
     companion object {
         private const val TAG = "HermesEngineService"
-        const val NOTIFICATION_ID = 48201
+        private const val NOTIFICATION_ID = 2888
+        const val ACTION_START = "org.nousresearch.hermes.action.START_SERVICE"
+        const val ACTION_STOP = "org.nousresearch.hermes.action.STOP_SERVICE"
+
+        var isRunning: Boolean = false
+            private set
 
         fun start(context: Context) {
-            val intent = Intent(context, HermesEngineService::class.java)
+            val intent = Intent(context, HermesEngineService::class.java).apply {
+                action = ACTION_START
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {
@@ -148,8 +38,90 @@ class HermesEngineService : Service() {
         }
 
         fun stop(context: Context) {
-            val intent = Intent(context, HermesEngineService::class.java)
+            val intent = Intent(context, HermesEngineService::class.java).apply {
+                action = ACTION_STOP
+            }
             context.stopService(intent)
         }
+    }
+
+    private var wakeLock: PowerManager.WakeLock? = null
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_STOP -> {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            else -> {
+                acquireWakeLock()
+                startInForeground()
+                isRunning = true
+            }
+        }
+        return START_STICKY
+    }
+
+    private fun acquireWakeLock() {
+        if (wakeLock == null) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            wakeLock = powerManager?.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "HermesAgent::BackgroundWakeLock"
+            )?.apply {
+                setReferenceCounted(false)
+                acquire(12 * 60 * 60 * 1000L) // 12-hour safe auto-release
+            }
+            Log.i(TAG, "Hermes Background WakeLock acquired.")
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+                Log.i(TAG, "Hermes Background WakeLock released.")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error releasing wake lock: ${e.message}")
+        } finally {
+            wakeLock = null
+        }
+    }
+
+    private fun startInForeground() {
+        val notificationIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            notificationIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification: Notification = NotificationCompat.Builder(this, HermesApplication.NOTIFICATION_CHANNEL_ID)
+            .setContentTitle("Hermes Agent")
+            .setContentText("Background persistence active — Agent engine connected")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+    }
+
+    override fun onDestroy() {
+        isRunning = false
+        releaseWakeLock()
+        super.onDestroy()
+        Log.i(TAG, "HermesEngineService destroyed.")
     }
 }

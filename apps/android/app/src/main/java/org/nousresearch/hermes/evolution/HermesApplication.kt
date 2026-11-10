@@ -3,49 +3,43 @@ package org.nousresearch.hermes.evolution
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Context
+import android.content.SharedPreferences
 import android.os.Build
 import android.util.Log
-import com.chaquo.python.Python
-import com.chaquo.python.android.AndroidPlatform
-import org.nousresearch.hermes.evolution.data.vault.CredentialVault
 
 class HermesApplication : Application() {
 
     companion object {
-        const val NOTIFICATION_CHANNEL_ID = "hermes_evolution_agent_channel"
+        const val NOTIFICATION_CHANNEL_ID = "hermes_agent_service_channel"
+        private const val PREFS_NAME = "hermes_agent_prefs"
+        const val PREF_GATEWAY_URL = "gateway_url"
+        const val DEFAULT_GATEWAY_URL = "http://127.0.0.1:8080/"
+        const val PREF_WAKELOCK_ENABLED = "wakelock_enabled"
+
         private const val TAG = "HermesApplication"
         lateinit var instance: HermesApplication
             private set
     }
 
-    lateinit var credentialVault: CredentialVault
-        private set
+    val prefs: SharedPreferences by lazy {
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
+    var gatewayUrl: String
+        get() = prefs.getString(PREF_GATEWAY_URL, DEFAULT_GATEWAY_URL) ?: DEFAULT_GATEWAY_URL
+        set(value) = prefs.edit().putString(PREF_GATEWAY_URL, value).apply()
+
+    var isWakeLockEnabled: Boolean
+        get() = prefs.getBoolean(PREF_WAKELOCK_ENABLED, false)
+        set(value) = prefs.edit().putBoolean(PREF_WAKELOCK_ENABLED, value).apply()
 
     override fun onCreate() {
         super.onCreate()
         instance = this
 
-        // Initialize Android Keystore backed Credential Vault
-        credentialVault = CredentialVault(this)
-
-        // Initialize Notification Channel for Foreground Service
         createNotificationChannel()
-
-        // Initialize Python runtime via Chaquopy if available
-        initPythonRuntime()
-
-        Log.i(TAG, "Hermes Evolution Android Application initialized.")
-    }
-
-    private fun initPythonRuntime() {
-        try {
-            if (!Python.isStarted()) {
-                Python.start(AndroidPlatform(this))
-                Log.i(TAG, "Chaquopy embedded Python runtime started successfully.")
-            }
-        } catch (e: Throwable) {
-            Log.w(TAG, "Chaquopy startup deferred or running in host test mode: ${e.message}")
-        }
+        Log.i(TAG, "Hermes Agent Android Companion initialized. Target Gateway: $gatewayUrl")
     }
 
     private fun createNotificationChannel() {
