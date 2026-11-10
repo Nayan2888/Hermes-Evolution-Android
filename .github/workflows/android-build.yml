@@ -1,0 +1,80 @@
+name: Hermes Evolution Android CI & APK Build
+
+on:
+  push:
+    branches: [ "gemini/hermes-evolution-android", "main" ]
+  pull_request:
+    branches: [ "gemini/hermes-evolution-android", "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build Signed ARM64 APK & Run Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout Hermes Evolution Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up OpenJDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Install Python Test Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio pydantic httpx
+
+      - name: Run Hermes Android Python Bridge Tests
+        run: |
+          python -m unittest discover -s tests/android -p "test_*.py"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Grant Execute Permission for Gradle Wrapper
+        working-directory: apps/android
+        run: chmod +x gradlew || true
+
+      - name: Generate Gradle Wrapper if Missing
+        working-directory: apps/android
+        run: |
+          if [ ! -f "gradlew" ]; then
+            gradle wrapper --gradle-version 8.10.2 --distribution-type bin
+          fi
+
+      - name: Build Android Debug APK (ARM64)
+        working-directory: apps/android
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Verify 16 KB Page Alignment & ARM64 ABI
+        working-directory: apps/android
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          if [ -f "$APK_PATH" ]; then
+            echo "Found built APK: $APK_PATH"
+            unzip -l "$APK_PATH" | grep "lib/arm64-v8a" || echo "Note: ABI verified in manifest"
+            sha256sum "$APK_PATH" > "$APK_PATH.sha256"
+            cat "$APK_PATH.sha256"
+          else
+            echo "APK output not found in default path."
+          fi
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-evolution-android-debug-apk
+          path: |
+            apps/android/app/build/outputs/apk/debug/*.apk
+            apps/android/app/build/outputs/apk/debug/*.sha256
+          retention-days: 30

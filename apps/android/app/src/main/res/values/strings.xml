@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Hermes Evolution</string>
+    <string name="agent_status_ready">HERMES EVOLUTION — READY TO WORK</string>
+    <string name="agent_status_thinking">HERMES EVOLUTION — THINKING</string>
+    <string name="agent_status_working">HERMES EVOLUTION — EXECUTING TOOLS</string>
+    <string name="agent_status_waiting">HERMES EVOLUTION — AWAITING USER APPROVAL</string>
+    <string name="agent_status_completed">HERMES EVOLUTION — TASK COMPLETED</string>
+    <string name="agent_status_error">HERMES EVOLUTION — ATTENTION REQUIRED</string>
+    <string name="agent_status_offline">HERMES EVOLUTION — LOCAL OFFLINE MODE</string>
+    <string name="service_notification_channel">Hermes Agent Service</string>
+    <string name="service_notification_desc">Running Hermes Agent Engine background loop</string>
+</resources>
