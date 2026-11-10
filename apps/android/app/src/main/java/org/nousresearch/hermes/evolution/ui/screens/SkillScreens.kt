@@ -42,6 +42,7 @@ import org.nousresearch.hermes.evolution.data.model.SkillItem
 import org.nousresearch.hermes.evolution.ui.theme.CyanGlow
 import org.nousresearch.hermes.evolution.ui.theme.ElectricIndigo
 import org.nousresearch.hermes.evolution.ui.theme.EmeraldReady
+import org.nousresearch.hermes.evolution.ui.theme.RoseError
 import org.nousresearch.hermes.evolution.ui.theme.SurfaceBorder
 import org.nousresearch.hermes.evolution.ui.theme.SurfaceContainer
 import org.nousresearch.hermes.evolution.ui.theme.SurfaceDark

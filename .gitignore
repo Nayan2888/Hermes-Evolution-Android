@@ -40,6 +40,7 @@ data/
 # The Connectors page's wire layer (apps/desktop/src/app/capabilities/connectors/data/)
 # — same reason: the bare `data/` pattern above would otherwise swallow it.
 !apps/desktop/src/app/capabilities/connectors/data/
+!apps/android/**/data/
 .pytest_cache/
 test_durations.json
 .pytest-cache/
