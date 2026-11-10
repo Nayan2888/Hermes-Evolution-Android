@@ -7,12 +7,12 @@ plugins {
 
 android {
     namespace = "org.nousresearch.hermes.evolution"
-    compileSdk = 36
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "org.nousresearch.hermes.evolution"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0.0-evolution"
 
@@ -27,7 +27,6 @@ android {
 
         python {
             version = "3.14"
-            buildPython("/data/user/0/com.termux/files/usr/bin/python3")
 
             pip {
                 install("python-dotenv==1.2.4")
